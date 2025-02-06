@@ -4,6 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import MetaData
 from sqlalchemy.ext.hybrid import hybrid_property
 from flask_bcrypt import Bcrypt
+from datetime import date
 import re
 
 # Define metadata, instantiate db
@@ -17,12 +18,15 @@ bcrypt = Bcrypt()
 class User(db.Model, SerializerMixin):
     __tablename__ = 'users'
 
-    serialize_rules = ('-password',)  # Exclude password from serialization
+    serialize_rules = ('-password', '-itineraries.user')  # Exclude password and avoid circular reference
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), nullable=False, unique=True)
     email = db.Column(db.String(120), nullable=False, unique=True)
     _password_hash = db.Column(db.String(128), nullable=False)  # Ensuring enough space for bcrypt hashes
+
+    # Relationship with Itineraries
+    itineraries = db.relationship("Itinerary", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f'<User ID: {self.id}, Username: {self.username}, Email: {self.email}>'
@@ -56,3 +60,39 @@ class User(db.Model, SerializerMixin):
 
     def check_password(self, plaintext_password):
         return bcrypt.check_password_hash(self._password_hash, plaintext_password)
+
+
+# Itinerary Model
+class Itinerary(db.Model, SerializerMixin):
+    __tablename__ = 'itineraries'
+
+    serialize_rules = ('-user.itineraries')  # Prevent circular reference 
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+
+    # Relationship with User
+    user = db.relationship("User", back_populates="itineraries")
+
+    def __repr__(self):
+        return f"<Itinerary {self.name} | {self.start_date} to {self.end_date}>"
+
+    @validates('name')
+    def validate_name(self, key, name):
+        if not name or len(name) > 100:
+            raise ValueError("Itinerary name must be between 1 and 100 characters.")
+        return name
+
+    @validates('start_date', 'end_date')
+    def validate_dates(self, key, date_value):
+        if not date_value:
+            raise ValueError(f"{key.replace('_', ' ').capitalize()} is required.")
+        
+        # Ensure start_date is before end_date
+        if key == 'end_date' and self.start_date > date_value:
+            raise ValueError("End date must be after start date.")
+        
+        return date_value
