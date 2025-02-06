@@ -76,6 +76,9 @@ class Itinerary(db.Model, SerializerMixin):
 
     # Relationship with User
     user = db.relationship("User", back_populates="itineraries")
+    
+    # Relationship with Destinations
+    destinations = db.relationship("Destination", back_populates="itinerary", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Itinerary {self.name} | {self.start_date} to {self.end_date}>"
@@ -96,3 +99,26 @@ class Itinerary(db.Model, SerializerMixin):
             raise ValueError("End date must be after start date.")
         
         return date_value
+
+
+# Destination Model
+class Destination(db.Model, SerializerMixin):
+    __tablename__ = 'destinations'
+
+    serialize_rules = ('-itinerary.destinations')  # Prevent circular reference
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    itinerary_id = db.Column(db.Integer, db.ForeignKey('itineraries.id'), nullable=False)
+
+    # Relationship with Itinerary
+    itinerary = db.relationship("Itinerary", back_populates="destinations")
+
+    def __repr__(self):
+        return f"<Destination {self.name}>"
+
+    @validates('name')
+    def validate_name(self, key, name):
+        if not name or len(name) > 200:
+            raise ValueError("Destination name must be between 1 and 200 characters.")
+        return name
