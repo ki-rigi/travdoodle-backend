@@ -6,7 +6,7 @@ from flask_bcrypt import Bcrypt
 
 # Local imports
 from app import app  # Import Flask app
-from model import db, User, Itinerary  # Import your User and Itinerary models
+from model import db, User, Itinerary, Destination  # Import your User and Itinerary models
 
 bcrypt = Bcrypt()
 fake = Faker()
@@ -51,7 +51,7 @@ if __name__ == '__main__':
         # Create itineraries for each user
         itineraries = []
         for user in users:
-            for _ in range(3):  # Create 3 itineraries per user
+            for _ in range(2):  # Create 2 itineraries per user
                 start_date, end_date = generate_random_dates()
                 itinerary = Itinerary(
                     name=fake.city(),
@@ -60,9 +60,24 @@ if __name__ == '__main__':
                     user_id=user.id  # Associate each itinerary with a user
                 )
                 itineraries.append(itinerary)
+                db.session.add(itinerary)
 
-        # Add and commit itineraries at once
-        db.session.bulk_save_objects(itineraries)
         db.session.commit()
 
-        print("Database reset and seeding completed with users and itineraries! ✅")
+        # Retrieve itineraries again with IDs assigned
+        itineraries = Itinerary.query.all()
+
+        # Create destinations for each itinerary
+        destinations = []
+        for itinerary in itineraries:
+            for _ in range(2):  # Create 2 destinations per itinerary
+                destination = Destination(
+                    name=fake.city(),
+                    itinerary_id=itinerary.id  # Associate each itinerary with a user
+                )
+                destinations.append(destination)
+                db.session.add(destination)
+
+        db.session.commit()
+
+        print("Database reset and seeding completed! ✅")
