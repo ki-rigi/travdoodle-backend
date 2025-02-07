@@ -66,7 +66,7 @@ class User(db.Model, SerializerMixin):
 class Itinerary(db.Model, SerializerMixin):
     __tablename__ = 'itineraries'
 
-    serialize_rules = ('-user.itineraries')  # Prevent circular reference 
+    serialize_rules = ('-user.itineraries', '-destinations.itinerary', '-packing_items.itinerary')  # Prevent circular references
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -79,6 +79,9 @@ class Itinerary(db.Model, SerializerMixin):
     
     # Relationship with Destinations
     destinations = db.relationship("Destination", back_populates="itinerary", cascade="all, delete-orphan")
+
+    # Relationship with Packing Items
+    packing_items = db.relationship("PackingItem", back_populates="itinerary", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Itinerary {self.name} | {self.start_date} to {self.end_date}>"
@@ -105,8 +108,8 @@ class Itinerary(db.Model, SerializerMixin):
 class Destination(db.Model, SerializerMixin):
     __tablename__ = 'destinations'
 
-    serialize_rules = ('-itinerary.destinations')  # Prevent circular reference
-
+    serialize_rules = ('-itinerary.destinations', '-accommodations.destination')  # Prevent circular reference
+    
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     itinerary_id = db.Column(db.Integer, db.ForeignKey('itineraries.id'), nullable=False)
@@ -116,6 +119,9 @@ class Destination(db.Model, SerializerMixin):
 
     #Relationship with Activity
     activities = db.relationship("Activity", back_populates="destination", cascade ='all, delete-orphan')
+
+    # Relationship with Accommodations
+    accommodations = db.relationship("Accommodation", back_populates="destination", cascade='all, delete-orphan')
 
     def __repr__(self):
         return f"<Destination {self.name}>"
@@ -159,6 +165,93 @@ class Activity(db.Model, SerializerMixin):
         if len(description) > 500:
             raise ValueError("Description must be between 1 and 500 characters.")
         return description.strip()
+    
+
+# Accommodation Model
+class Accommodation(db.Model, SerializerMixin):
+    __tablename__ = 'accommodations'
+    
+    serialize_rules = ('-destination.accommodations',)  # Prevent circular reference
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    address = db.Column(db.String(300), nullable=False)
+    check_in_date = db.Column(db.Date, nullable=False)
+    check_out_date = db.Column(db.Date, nullable=False)
+    price = db.Column(db.Float, nullable=False)
+    destination_id = db.Column(db.Integer, db.ForeignKey('destinations.id'), nullable=False)
+    
+    # Relationship with Destination
+    destination = db.relationship("Destination", back_populates="accommodations")
+    
+    def __repr__(self):
+        return f"<Accommodation {self.name} | {self.address} | ${self.price:.2f}>"
+    
+    @validates('name')
+    def validate_name(self, key, name):
+        if not name or len(name.strip()) == 0:
+            raise ValueError("Accommodation name cannot be empty.")
+        if len(name) > 200:
+            raise ValueError("Accommodation name must be between 1 and 200 characters.")
+        return name.strip()
+    
+    @validates('address')
+    def validate_address(self, key, address):
+        if not address or len(address.strip()) == 0:
+            raise ValueError("Address cannot be empty.")
+        if len(address) > 300:
+            raise ValueError("Address must be between 1 and 300 characters.")
+        return address.strip()
+    
+    @validates('check_in_date', 'check_out_date')
+    def validate_dates(self, key, date_value):
+        if not date_value:
+            raise ValueError(f"{key.replace('_', ' ').capitalize()} is required.")
+        
+        if key == 'check_out_date' and self.check_in_date and date_value <= self.check_in_date:
+            raise ValueError("Check-out date must be after check-in date.")
+        
+        return date_value
+    
+    @validates('price')
+    def validate_price(self, key, price):
+        if price is None or price < 0:
+            raise ValueError("Price must be a positive number.")
+        return price
+    
+
+    # PackingItem Model
+class PackingItem(db.Model, SerializerMixin):
+    __tablename__ = 'packing_items'
+
+    serialize_rules = ('-itinerary.packing_items',)  # Prevent circular reference
+
+    id = db.Column(db.Integer, primary_key=True)
+    item_name = db.Column(db.String(100), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False, default=1)
+    packed = db.Column(db.Boolean, default=False, nullable=False)
+    itinerary_id = db.Column(db.Integer, db.ForeignKey('itineraries.id'), nullable=False)
+
+    # Relationship with Itinerary
+    itinerary = db.relationship("Itinerary", back_populates="packing_items")
+
+    def __repr__(self):
+        return f"<PackingItem {self.item_name} (x{self.quantity}) | Packed: {self.packed}>"
+
+    @validates('item_name')
+    def validate_item_name(self, key, item_name):
+        if not item_name or len(item_name.strip()) == 0:
+            raise ValueError("Item name cannot be empty.")
+        if len(item_name) > 100:
+            raise ValueError("Item name must be between 1 and 100 characters.")
+        return item_name.strip()
+
+    @validates('quantity')
+    def validate_quantity(self, key, quantity):
+        if quantity is None or quantity < 1:
+            raise ValueError("Quantity must be at least 1.")
+        return quantity
+
 
     
 
