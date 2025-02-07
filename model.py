@@ -114,6 +114,9 @@ class Destination(db.Model, SerializerMixin):
     # Relationship with Itinerary
     itinerary = db.relationship("Itinerary", back_populates="destinations")
 
+    #Relationship with Activity
+    activities = db.relationship("Activity", back_populates="destination", cascade ='all, delete-orphan')
+
     def __repr__(self):
         return f"<Destination {self.name}>"
 
@@ -122,3 +125,44 @@ class Destination(db.Model, SerializerMixin):
         if not name or len(name) > 200:
             raise ValueError("Destination name must be between 1 and 200 characters.")
         return name
+    
+
+# Activity Model
+class Activity(db.Model, SerializerMixin):
+    __tablename__ = 'activities'
+    
+    serialize_rules = ('-destination.activities',)  # Prevent circular reference
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.String(500), nullable=False)  
+    destination_id = db.Column(db.Integer, db.ForeignKey('destinations.id'), nullable=False)
+                               
+    # Relationship with Destination
+    destination = db.relationship("Destination", back_populates="activities")
+    
+    def __repr__(self):
+        return f"<Activity {self.name} | {self.description[:30]}...>"
+
+    @validates('name')
+    def validate_name(self, key, name):
+        if not name or len(name.strip()) == 0:
+            raise ValueError("Activity name cannot be empty.")
+        if len(name) > 200:
+            raise ValueError("Activity name must be between 1 and 200 characters.")
+        return name.strip()
+    
+    @validates('description')
+    def validate_description(self, key, description):
+        if not description or len(description.strip()) == 0:
+            raise ValueError("Description cannot be empty.")
+        if len(description) > 500:
+            raise ValueError("Description must be between 1 and 500 characters.")
+        return description.strip()
+
+    
+
+
+
+
+                               

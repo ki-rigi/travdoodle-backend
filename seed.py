@@ -6,15 +6,15 @@ from flask_bcrypt import Bcrypt
 
 # Local imports
 from app import app  # Import Flask app
-from model import db, User, Itinerary, Destination  # Import your User and Itinerary models
+from model import db, User, Itinerary, Destination, Activity  # Import your models
 
 bcrypt = Bcrypt()
 fake = Faker()
 
 def generate_random_dates():
-    """Generate random start and end dates."""
+    """Generate realistic vacation start and end dates."""
     start_date = fake.date_between(start_date='-1y', end_date='today')
-    end_date = fake.date_between(start_date=start_date, end_date='+1y')  # End date after start date
+    end_date = start_date + timedelta(days=random.randint(3, 14))  # Trips last 3-14 days
     return start_date, end_date
 
 if __name__ == '__main__':
@@ -34,18 +34,18 @@ if __name__ == '__main__':
         db.session.add(felicia)
         db.session.commit()  # Commit to get the user id
 
-        # Create random users and commit them to get their IDs
+        # Create random users and commit them
         users = []
         for _ in range(4):  # Generate 4 users
             user = User(
-                username=fake.user_name(),
-                email=fake.email(),
-                password="password123"  # Gets hashed automatically via @password.setter
+                username=fake.unique.user_name(),
+                email=fake.unique.email(),
+                password="password123"  # Gets hashed automatically
             )
             db.session.add(user)
-        db.session.commit()  # Now commit to assign IDs to users
+        db.session.commit()
 
-        # Retrieve users again with IDs assigned
+        # Retrieve users again
         users = User.query.all()
 
         # Create itineraries for each user
@@ -57,14 +57,14 @@ if __name__ == '__main__':
                     name=fake.city(),
                     start_date=start_date,
                     end_date=end_date,
-                    user_id=user.id  # Associate each itinerary with a user
+                    user_id=user.id
                 )
                 itineraries.append(itinerary)
                 db.session.add(itinerary)
 
         db.session.commit()
 
-        # Retrieve itineraries again with IDs assigned
+        # Retrieve itineraries
         itineraries = Itinerary.query.all()
 
         # Create destinations for each itinerary
@@ -73,10 +73,27 @@ if __name__ == '__main__':
             for _ in range(2):  # Create 2 destinations per itinerary
                 destination = Destination(
                     name=fake.city(),
-                    itinerary_id=itinerary.id  # Associate each itinerary with a user
+                    itinerary_id=itinerary.id  # Associate with itinerary
                 )
                 destinations.append(destination)
                 db.session.add(destination)
+
+        db.session.commit()
+
+        # Retrieve destinations
+        destinations = Destination.query.all()
+
+        # Create activities for each destination
+        activities = []
+        for destination in destinations:
+            for _ in range(2):  # Create 2 activities per destination
+                activity = Activity(
+                    name=fake.catch_phrase(),  # More natural activity name
+                    description=fake.sentence(),  # Full sentence for description
+                    destination_id=destination.id
+                )
+                activities.append(activity)
+                db.session.add(activity)
 
         db.session.commit()
 
