@@ -4,25 +4,18 @@ import os
 from dotenv import load_dotenv
 from flask_cors import CORS
 from flask_migrate import Migrate
-from model import db
-from flask_mail import Mail
-from flask_mail import Message
+from model import db, User
+
 
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///travdoodle.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.json.compact = False
-app.config['MAIL_SERVER'] = ''
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = ''
-app.config['MAIL_PASSWORD'] = ''
-app.config['MAIL_DEFAULT_SENDER'] = ''
+
 
 migrate = Migrate(app, db)
 db.init_app(app)
-mail = Mail(app)
 
 
 api = Api(app)
@@ -36,15 +29,192 @@ load_dotenv()
 
 from model import db
 # Set secret key
-app.secret_key = ''
+app.secret_key = os.environ.get('SECRET_KEY')
 
 # Define home route
 @app.route('/')
 def home():
-    return '<h1>Travdoodle server<hi>'
+    return """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Travdoodle API</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 0;
+                background-color: #f5f5f5;
+            }
+            .container {
+                max-width: 800px;
+                margin: 50px auto;
+                background-color: #fff;
+                padding: 20px;
+                border-radius: 10px;
+                box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            }
+            h1 {
+                text-align: center;
+            }
+            p {
+                margin-bottom: 15px;
+            }
+            ul {
+                list-style-type: none;
+                padding-left: 20px;
+            }
+            li {
+                margin-bottom: 5px;
+            }
+            a {
+                color: #007bff;
+                text-decoration: none;
+            }
+            a:hover {
+                text-decoration: underline;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Welcome to travdoodle API</h1>
+            <p>This is the API for travdoodle application.</p>
+            <p>Endpoints:</p>
+            <ul>
+                <li><strong>/users</strong> -:GET - List of all users details</li>
+                <li><strong>/users</strong> -:POST - Sign up a new user</li>
+                <li><strong>/users/int:id</strong> -:GET - Get a user details</li>
+                <li><strong>/users/int:id</strong> -:PATCH - Update a user details</li>
+                <li><strong>/users/int:id</strong> -:DELETE - Delete a user</li>
+                <li><strong>/login</strong> -:POST - User login</li>
+                <li><strong>/logout</strong> -:DELETE - User logout</li>
+                <li><strong>/check_session</strong>:GET - Check user session</li>
+            </ul>
+        </div>
+    </body>
+    </html>
+    """
     
 
 # Resource classes
+class Login(Resource):    
+    def post(self):
+        data = request.get_json()
+        identifier = data.get('identifier')  # This can be username, email
+        password = data.get('password')
+        
+        if not identifier or not password:
+            return {'message': 'username/email and password are required'}, 400
+        
+        # Check if the input is an email address
+        is_email = '@' in identifier
+        
+        if is_email:
+            user = User.query.filter_by(email=identifier).first()
+        else:
+            user = User.query.filter_by(username=identifier).first()
+        
+        if not user:
+            return {'error': 'User not found'}, 404
+        
+        if user.check_password(password):
+            session['user_id'] = user.id
+            return user.to_dict(), 200
+        
+        return {'error': 'Invalid password'}, 401
+
+class Logout(Resource):
+    def delete(self):
+        if 'user_id' in session:
+            session.pop('user_id')
+            return '', 204
+
+
+class CheckSession(Resource):
+    def get(self):
+        if 'user_id' in session:
+            user_id = session['user_id']
+            user = User.query.get(user_id)
+            if user:
+                return user.to_dict(), 200  
+            else:
+                return {'message': 'User not found'}, 404
+        else:
+            return {'message': 'Not logged in'}, 401  
+        
+# User classes
+        
+class Users(Resource):
+    def get(self):
+        users = [user.to_dict() for user in User.query.all()]
+        return make_response(jsonify(users), 200)
+
+    def post(self):
+        data = request.get_json()
+
+        # Check if the email already exists
+        existing_email = User.query.filter_by(email=data['email']).first()
+        if existing_email:
+            return make_response(jsonify({'message': 'Email already exists'}), 400)
+
+        # Check if the username already exists
+        existing_username = User.query.filter_by(username=data['username']).first()
+        if existing_username:
+            return make_response(jsonify({'message': 'Username already exists'}), 400)
+
+        # Create a new user
+        new_user = User(
+            username=data['username'],
+            email=data['email'],
+            password=data['password']
+        )
+
+        # Add the new user to the database
+        db.session.add(new_user)
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return {'error': str(e)}, 500
+
+        return make_response(jsonify({'message': 'User successfully registered', 'user': new_user.to_dict()}), 201)
+
+
+
+class UserByID(Resource):
+    def get(self, id):
+        user = User.query.filter_by(id=id).first().to_dict()
+        return make_response(jsonify(user), 200)
+
+    def patch(self, id):
+        user = User.query.filter_by(id=id).first()
+        data = request.get_json()
+
+        for key, value in data.items():
+            setattr(user, key, value)
+
+        db.session.commit()
+
+        return make_response(jsonify(user.to_dict()), 200)
+
+    def delete(self, id):
+        user = User.query.filter_by(id=id).first()
+
+        db.session.delete(user)
+        db.session.commit()
+
+
+
+# Add routes to the API
+api.add_resource(Login, '/login')
+api.add_resource(Logout, '/logout')
+api.add_resource(CheckSession, '/check_session')
+api.add_resource(Users, '/users')
+api.add_resource(UserByID, '/users/<int:id>')
+       
 
 
 if __name__ == '__main__':
