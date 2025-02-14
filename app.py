@@ -4,7 +4,8 @@ import os
 from dotenv import load_dotenv
 from flask_cors import CORS
 from flask_migrate import Migrate
-from model import db, User
+from model import db, User ,Itinerary
+from datetime import datetime
 
 
 
@@ -29,7 +30,7 @@ load_dotenv()
 
 from model import db
 # Set secret key
-app.secret_key = os.environ.get('SECRET_KEY')
+app.secret_key = os.environ.get('SECRET_KEY', 'fallback_secret')
 
 # Define home route
 @app.route('/')
@@ -84,14 +85,20 @@ def home():
             <p>This is the API for travdoodle application.</p>
             <p>Endpoints:</p>
             <ul>
+                <li><strong>/login</strong> -:POST - User login</li>
+                <li><strong>/logout</strong> -:DELETE - User logout</li>
+                <li><strong>/check_session</strong>:GET - Check user session</li>
                 <li><strong>/users</strong> -:GET - List of all users details</li>
                 <li><strong>/users</strong> -:POST - Sign up a new user</li>
                 <li><strong>/users/int:id</strong> -:GET - Get a user details</li>
                 <li><strong>/users/int:id</strong> -:PATCH - Update a user details</li>
                 <li><strong>/users/int:id</strong> -:DELETE - Delete a user</li>
-                <li><strong>/login</strong> -:POST - User login</li>
-                <li><strong>/logout</strong> -:DELETE - User logout</li>
-                <li><strong>/check_session</strong>:GET - Check user session</li>
+                <li><strong>/itineraries</strong> -:GET - List of all itineraries details</li>
+                <li><strong>/itineraries</strong> -:POST - Sign up a new itinerary</li>
+                <li><strong>/itineraries/int:id</strong> -:GET - Get itinerary details</li>
+                <li><strong>/itineraries/int:id</strong> -:PATCH - Update itinerary details</li>
+                <li><strong>/itineraries/int:id</strong> -:DELETE - Delete itinerary</li>
+                
             </ul>
         </div>
     </body>
@@ -215,6 +222,86 @@ api.add_resource(CheckSession, '/check_session')
 api.add_resource(Users, '/users')
 api.add_resource(UserByID, '/users/<int:id>')
        
+
+
+# itinerary classes
+        
+class Itineraries(Resource):
+    def get(self):
+        itineraries = [itinerary.to_dict() for itinerary in Itinerary.query.all()]
+        return make_response(jsonify(itineraries), 200)
+
+    def post(self):
+        data = request.get_json()
+
+        # Validate user exists
+        existing_user = User.query.filter_by(id=data['user_id']).first()
+        if not existing_user:
+            return make_response(jsonify({'message': 'User does not exist'}), 400)
+
+        try:
+            # Convert string dates to Python date objects
+            start_date = datetime.strptime(data['start_date'], "%Y-%m-%d").date()
+            end_date = datetime.strptime(data['end_date'], "%Y-%m-%d").date()
+        except ValueError:
+            return make_response(jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400)
+
+        # Create a new itinerary
+        new_itinerary = Itinerary(
+            name=data['name'],
+            start_date=start_date,
+            end_date=end_date,
+            user_id=data['user_id']
+        )
+
+        # Save to the database
+        db.session.add(new_itinerary)
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return {'error': str(e)}, 500
+
+        return make_response(jsonify({'message': 'Itinerary successfully created', 'itinerary': new_itinerary.to_dict()}), 201)
+
+
+  
+class ItineraryByID(Resource):
+    def get(self, id):
+        itinerary = Itinerary.query.filter_by(id=id).first().to_dict()
+        return make_response(jsonify(itinerary), 200)
+
+    def patch(self, id):
+        itinerary = Itinerary.query.filter_by(id=id).first()
+        if not itinerary:
+            return make_response(jsonify({'error': 'Itinerary not found'}), 404)
+
+        data = request.get_json()
+
+        for key, value in data.items():
+            if key in ["start_date", "end_date"]:
+                try:
+                    # Convert date string to Python date object
+                    value = datetime.strptime(value, "%Y-%m-%d").date()
+                except ValueError:
+                    return make_response(jsonify({'error': f'Invalid format for {key}. Use YYYY-MM-DD'}), 400)
+
+            setattr(itinerary, key, value)
+
+        db.session.commit()
+
+        return make_response(jsonify(itinerary.to_dict()), 200)
+
+    def delete(self, id):
+        itinerary = Itinerary.query.filter_by(id=id).first()
+
+        db.session.delete(itinerary)
+        db.session.commit()
+
+
+# Add routes to the API
+api.add_resource(Itineraries, '/itineraries')
+api.add_resource(ItineraryByID, '/itineraries/<int:id>')
 
 
 if __name__ == '__main__':
