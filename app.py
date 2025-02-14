@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 from flask_cors import CORS
 from flask_migrate import Migrate
-from model import db, User ,Itinerary, Destination
+from model import db, User ,Itinerary, Destination, Accommodation
 from datetime import datetime
 
 
@@ -103,6 +103,11 @@ def home():
                 <li><strong>/destinations/int:id</strong> -:GET - Get destination details</li>
                 <li><strong>/destinations/int:id</strong> -:PATCH - Update destinaion details</li>
                 <li><strong>/destinations/int:id</strong> -:DELETE - Delete destination</li>
+                 <li><strong>/accommodations</strong> -:GET - List of all accommodations details</li>
+                <li><strong>/accommodations</strong> -:POST - Sign up a new accommodation</li>
+                <li><strong>/accommodations/int:id</strong> -:GET - Get accommodation details</li>
+                <li><strong>/accommodations/int:id</strong> -:PATCH - Update accommodation details</li>
+                <li><strong>/accommodations/int:id</strong> -:DELETE - Delete accommodation</li>
                  
             </ul>
         </div>
@@ -373,6 +378,110 @@ class DestinationByID(Resource):
         # Add routes to the API
 api.add_resource(Destinations, '/destinations')
 api.add_resource(DestinationByID, '/destinations/<int:id>')
+
+
+
+# accommodation classes
+        
+class Accommodations(Resource):
+    def get(self):
+        accommodations = [accommodation.to_dict() for accommodation in Accommodation.query.all()]
+        return make_response(jsonify(accommodations), 200)
+
+    def post(self):
+        data = request.get_json()
+
+        # Validate destination exists
+        existing_destination = Destination.query.filter_by(id=data['destination_id']).first()
+        if not existing_destination:
+            return make_response(jsonify({'message': 'Destination does not exist'}), 400)
+
+        try:
+            # Convert price to a float
+            price = float(data['price'])  
+        except ValueError:
+            return make_response(jsonify({'error': 'Invalid price format'}), 400)
+        
+        try:
+                # Convert string dates to Python date objects
+                check_in_date = datetime.strptime(data['check_in_date'], "%Y-%m-%d").date()
+                check_out_date = datetime.strptime(data['check_out_date'], "%Y-%m-%d").date()
+        except ValueError:
+                return make_response(jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400)
+
+        # Create a new accommodation
+        new_accommodation = Accommodation(
+            name=data['name'],
+            address=data['address'],
+            check_in_date=check_in_date,
+            check_out_date=check_out_date,
+            price=price,  # Ensuring correct type
+            destination_id=data['destination_id']
+        )
+
+        # Save to the database
+        db.session.add(new_accommodation)
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return {'error': str(e)}, 500
+
+        return make_response(jsonify({
+            'message': 'Accommodation successfully created',
+            'accommodation': new_accommodation.to_dict()
+        }), 201)
+
+
+class AccommodationByID(Resource):
+    def get(self, id):
+        accommodation = Accommodation.query.filter_by(id=id).first().to_dict()
+        return make_response(jsonify(accommodation), 200)
+
+    def patch(self, id):
+        accommodation = Accommodation.query.filter_by(id=id).first()
+        if not accommodation:
+            return make_response(jsonify({'error': 'Accommodation not found'}), 404)
+
+        data = request.get_json()
+
+        for key, value in data.items():
+            if key in ["check_in_date", "check_out_date"]:  # Handling date fields
+                try:
+                    # Convert date string to Python date object
+                    value = datetime.strptime(value, "%Y-%m-%d").date()
+                except ValueError:
+                    return make_response(jsonify({'error': f'Invalid format for {key}. Use YYYY-MM-DD'}), 400)
+                
+            if key == "price":  # Handling price field
+                try:
+                    value = float(value)  # Convert price to a float
+                except ValueError:
+                    return make_response(jsonify({'error': 'Invalid price format. It must be a number.'}), 400)
+                
+            setattr(accommodation, key, value)  # Set the value for the attribute
+
+        db.session.commit()  # Commit changes to the database
+
+        return make_response(jsonify(accommodation.to_dict()), 200)
+
+    def delete(self, id):
+        accommodation = Accommodation.query.filter_by(id=id).first()
+
+        if accommodation:
+            db.session.delete(accommodation)
+            db.session.commit()
+
+            return make_response(jsonify({'message': 'Accommodation deleted successfully'}), 200)
+        
+        return make_response(jsonify({'error': 'Accommodation not found'}), 404)
+
+
+
+       # Add routes to the API
+api.add_resource(Accommodations, '/accommodations')
+api.add_resource(AccommodationByID, '/accommodations/<int:id>')
+ 
 
 
 if __name__ == '__main__':
