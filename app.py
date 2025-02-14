@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 from flask_cors import CORS
 from flask_migrate import Migrate
-from model import db, User ,Itinerary, Destination, Accommodation,Activity
+from model import db, User ,Itinerary, Destination, Accommodation,Activity, PackingItem
 from datetime import datetime
 
 
@@ -113,6 +113,11 @@ def home():
                 <li><strong>/activities/int:id</strong> -:GET - Get activities details</li>
                 <li><strong>/activities/int:id</strong> -:PATCH - Update activity details</li>
                 <li><strong>/activities/int:id</strong> -:DELETE - Delete activity</li>
+                 <li><strong>/packing_items</strong> -:GET - List of all packing_items details</li>
+                <li><strong>/packing_items</strong> -:POST - Sign up a new packing_items</li>
+                <li><strong>/packing_items/int:id</strong> -:GET - Get packing_items details</li>
+                <li><strong>/packing_items/int:id</strong> -:PATCH - Update packing_item details</li>
+                <li><strong>/packing_items/int:id</strong> -:DELETE - Delete packing_item</li>
                  
             </ul>
         </div>
@@ -560,6 +565,81 @@ class ActivityByID(Resource):
 api.add_resource(Activities, '/activities')
 api.add_resource(ActivityByID, '/activities/<int:id>')
  
+
+# packingitem classes
+        
+class PackingItems(Resource):
+    def get(self):
+        packing_items = [packing_item.to_dict() for packing_item in PackingItem.query.all()]
+        return make_response(jsonify(packing_items), 200)
+
+    def post(self):
+        data = request.get_json()
+
+        # Validate itinerary exists
+        existing_itinerary = Itinerary.query.filter_by(id=data['itinerary_id']).first()
+        if not existing_itinerary:
+            return make_response(jsonify({'message': 'Itinerary does not exist'}), 400)
+
+        # Create a new packing_item
+        new_packing_item = PackingItem(
+            item_name=data['item_name'],
+            quantity=data['quantity'],
+            packed=data['packed'],
+            itinerary_id=data['itinerary_id']
+        )
+
+        # Save to the database
+        db.session.add(new_packing_item)
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return {'error': str(e)}, 500
+
+        return make_response(jsonify({
+            'message': 'Packing_item successfully created',
+            'packing_item': new_packing_item.to_dict()
+        }), 201)
+
+
+class PackingItemByID(Resource):
+    def get(self, id):
+        packing_item = PackingItem.query.filter_by(id=id).first().to_dict()
+        return make_response(jsonify(packing_item), 200)
+
+    def patch(self, id):
+        packing_item = PackingItem.query.filter_by(id=id).first()
+        if not packing_item:
+            return make_response(jsonify({'error': 'Packing_item not found'}), 404)
+
+        data = request.get_json()
+
+        for key, value in data.items():    
+            setattr(packing_item, key, value)  # Set the value for the attribute
+
+        db.session.commit()  # Commit changes to the database
+
+        return make_response(jsonify(packing_item.to_dict()), 200)
+
+    def delete(self, id):
+        packing_item = PackingItem.query.filter_by(id=id).first()
+
+        if packing_item:
+            db.session.delete(packing_item)
+            db.session.commit()
+
+            return make_response(jsonify({'message': 'Packing_item deleted successfully'}), 200)
+        
+        return make_response(jsonify({'error': 'Packing_item not found'}), 404)
+
+
+# Add routes to the API
+api.add_resource(PackingItems, '/packing_items')
+api.add_resource(PackingItemByID, '/packing_items/<int:id>')
+
+ 
+
 
 if __name__ == '__main__':
     with app.app_context():
