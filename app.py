@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 from flask_cors import CORS
 from flask_migrate import Migrate
-from model import db, User ,Itinerary, Destination, Accommodation
+from model import db, User ,Itinerary, Destination, Accommodation,Activity
 from datetime import datetime
 
 
@@ -108,6 +108,11 @@ def home():
                 <li><strong>/accommodations/int:id</strong> -:GET - Get accommodation details</li>
                 <li><strong>/accommodations/int:id</strong> -:PATCH - Update accommodation details</li>
                 <li><strong>/accommodations/int:id</strong> -:DELETE - Delete accommodation</li>
+                 <li><strong>/activities</strong> -:GET - List of all activities details</li>
+                <li><strong>/activities</strong> -:POST - Sign up a new activities</li>
+                <li><strong>/activities/int:id</strong> -:GET - Get activities details</li>
+                <li><strong>/activities/int:id</strong> -:PATCH - Update activity details</li>
+                <li><strong>/activities/int:id</strong> -:DELETE - Delete activity</li>
                  
             </ul>
         </div>
@@ -483,6 +488,78 @@ api.add_resource(Accommodations, '/accommodations')
 api.add_resource(AccommodationByID, '/accommodations/<int:id>')
  
 
+
+# activity classes
+        
+class Activities(Resource):
+    def get(self):
+        activities = [activity.to_dict() for activity in Activity.query.all()]
+        return make_response(jsonify(activities), 200)
+
+    def post(self):
+        data = request.get_json()
+
+        # Validate destination exists
+        existing_destination = Destination.query.filter_by(id=data['destination_id']).first()
+        if not existing_destination:
+            return make_response(jsonify({'message': 'Destination does not exist'}), 400)
+
+        # Create a new activity
+        new_activity = Activity(
+            name=data['name'],
+            description=data['description'],
+            destination_id=data['destination_id']
+        )
+
+        # Save to the database
+        db.session.add(new_activity)
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return {'error': str(e)}, 500
+
+        return make_response(jsonify({
+            'message': 'Activity successfully created',
+            'activity': new_activity.to_dict()
+        }), 201)
+    
+
+class ActivityByID(Resource):
+    def get(self, id):
+        activity = Activity.query.filter_by(id=id).first().to_dict()
+        return make_response(jsonify(activity), 200)
+
+    def patch(self, id):
+        activity = Activity.query.filter_by(id=id).first()
+        if not activity:
+            return make_response(jsonify({'error': 'Activity not found'}), 404)
+
+        data = request.get_json()
+
+        for key, value in data.items():    
+            setattr(activity, key, value)  # Set the value for the attribute
+
+        db.session.commit()  # Commit changes to the database
+
+        return make_response(jsonify(activity.to_dict()), 200)
+
+    def delete(self, id):
+        activity = Activity.query.filter_by(id=id).first()
+
+        if activity:
+            db.session.delete(activity)
+            db.session.commit()
+
+            return make_response(jsonify({'message': 'Activity deleted successfully'}), 200)
+        
+        return make_response(jsonify({'error': 'Activity not found'}), 404)
+
+
+# Add routes to the API
+api.add_resource(Activities, '/activities')
+api.add_resource(ActivityByID, '/activities/<int:id>')
+ 
 
 if __name__ == '__main__':
     with app.app_context():
