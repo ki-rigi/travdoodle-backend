@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 from flask_cors import CORS
 from flask_migrate import Migrate
-from model import db, User ,Itinerary
+from model import db, User ,Itinerary, Destination
 from datetime import datetime
 
 
@@ -98,7 +98,12 @@ def home():
                 <li><strong>/itineraries/int:id</strong> -:GET - Get itinerary details</li>
                 <li><strong>/itineraries/int:id</strong> -:PATCH - Update itinerary details</li>
                 <li><strong>/itineraries/int:id</strong> -:DELETE - Delete itinerary</li>
-                
+               <li><strong>/destinations</strong> -:GET - List of all destinations details</li>
+                <li><strong>/destinations</strong> -:POST - Sign up a new destination</li>
+                <li><strong>/destinations/int:id</strong> -:GET - Get destination details</li>
+                <li><strong>/destinations/int:id</strong> -:PATCH - Update destinaion details</li>
+                <li><strong>/destinations/int:id</strong> -:DELETE - Delete destination</li>
+                 
             </ul>
         </div>
     </body>
@@ -302,6 +307,72 @@ class ItineraryByID(Resource):
 # Add routes to the API
 api.add_resource(Itineraries, '/itineraries')
 api.add_resource(ItineraryByID, '/itineraries/<int:id>')
+
+
+
+     # destination classes
+        
+class Destinations(Resource):
+    def get(self):
+        destinations = [destination.to_dict() for destination in Destination.query.all()]
+        return make_response(jsonify(destinations), 200)
+
+    def post(self):
+        data = request.get_json()
+
+        # Validate itinerary exists
+        existing_itinerary = Itinerary.query.filter_by(id=data['itinerary_id']).first()
+        if not existing_itinerary:
+            return make_response(jsonify({'message': 'itinerary does not exist'}), 400)
+
+        
+        # Create a new destination
+        new_destination = Destination(
+            name=data['name'],
+            itinerary_id=data['itinerary_id']
+        )
+
+        # Save to the database
+        db.session.add(new_destination)
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return {'error': str(e)}, 500
+
+        return make_response(jsonify({'message': 'Destination successfully created', 'destination': new_destination.to_dict()}), 201)
+   
+
+
+class DestinationByID(Resource):
+    def get(self, id):
+        destination = Destination.query.filter_by(id=id).first().to_dict()
+        return make_response(jsonify(destination), 200)
+
+    def patch(self, id):
+        destination = Destination.query.filter_by(id=id).first()
+        if not destination:
+            return make_response(jsonify({'error': 'Destination not found'}), 404)
+
+        data = request.get_json()
+
+        for key, value in data.items():
+            setattr(destination, key, value)
+
+        db.session.commit()
+
+        return make_response(jsonify(destination.to_dict()), 200)
+
+    def delete(self, id):
+        destination = Destination.query.filter_by(id=id).first()
+
+        db.session.delete(destination)
+        db.session.commit() 
+
+
+        # Add routes to the API
+api.add_resource(Destinations, '/destinations')
+api.add_resource(DestinationByID, '/destinations/<int:id>')
 
 
 if __name__ == '__main__':
