@@ -32,7 +32,7 @@ Ensure you have the following installed:
 1. Clone the repository:
    ```sh
    git clone <repository-url>
-   cd travdoodle-api
+   cd travdoodle-backend
    ```
 2. Create a virtual environment and install dependencies:
    ```sh
