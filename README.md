@@ -1,5 +1,7 @@
 # Travdoodle API
 
+**Deployed API:** [Travdoodle API on Render](https://travdoodle-api.onrender.com/)
+
 ## Overview
 The **Travdoodle API** is a Flask-based RESTful API designed to support the **Travel Itinerary Organizer** application. It provides endpoints for managing users, itineraries, destinations, accommodations, activities, and packing items.
 
@@ -130,4 +132,3 @@ To deploy the API backend on Render:
 
 ## License
 This project is licensed under the MIT License.
-
