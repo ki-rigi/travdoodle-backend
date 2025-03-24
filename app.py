@@ -340,7 +340,7 @@ class ItineraryReportPDF(Resource):
         pdf.setFont("Helvetica-Bold", 16)
 
         # Title Section
-        pdf.setFillColor(colors.blue)
+        pdf.setFillColor(colors.maroon)
         pdf.rect(50, 740, 500, 30, fill=True, stroke=False)
         pdf.setFillColor(colors.white)
         pdf.drawString(60, 750, f"Itinerary Report: {itinerary.name}")
