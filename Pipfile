@@ -20,6 +20,7 @@ phonenumbers = "*"
 requests = "*"
 datetime = "*"
 flask-mail = "*"
+reportlab = "*"
 
 [dev-packages]
 

@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, make_response, session
+from flask import Flask, jsonify, request, make_response, session, Response
 from flask_restful import Resource,Api
 import os
 from dotenv import load_dotenv
@@ -6,6 +6,11 @@ from flask_cors import CORS
 from flask_migrate import Migrate
 from model import db, User ,Itinerary, Destination, Accommodation,Activity, PackingItem
 from datetime import datetime
+from io import BytesIO
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib import colors
+from reportlab.lib.utils import simpleSplit
 
 
 
@@ -98,6 +103,7 @@ def home():
                 <li><strong>/itineraries/int:id</strong> -:GET - Get itinerary details</li>
                 <li><strong>/itineraries/int:id</strong> -:PATCH - Update itinerary details</li>
                 <li><strong>/itineraries/int:id</strong> -:DELETE - Delete itinerary</li>
+                <li><strong>/itineraries/int:id/report/pdf</strong> -:GET - Get itinerary report</li>
                <li><strong>/destinations</strong> -:GET - List of all destinations details</li>
                 <li><strong>/destinations</strong> -:POST - Sign up a new destination</li>
                 <li><strong>/destinations/int:id</strong> -:GET - Get destination details</li>
@@ -322,6 +328,120 @@ class ItineraryByID(Resource):
 # Add routes to the API
 api.add_resource(Itineraries, '/itineraries')
 api.add_resource(ItineraryByID, '/itineraries/<int:id>')
+
+class ItineraryReportPDF(Resource):
+    def get(self, id):
+        itinerary = Itinerary.query.filter_by(id=id).first()
+        if not itinerary:
+            return make_response(jsonify({'error': 'Itinerary not found'}), 404)
+
+        buffer = BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=letter)
+        pdf.setFont("Helvetica-Bold", 16)
+
+        # Title Section
+        pdf.setFillColor(colors.blue)
+        pdf.rect(50, 740, 500, 30, fill=True, stroke=False)
+        pdf.setFillColor(colors.white)
+        pdf.drawString(60, 750, f"Itinerary Report: {itinerary.name}")
+        pdf.setFillColor(colors.black)
+
+        y_position = 700  # Start below title
+
+        def check_page_space(y_position, height_needed=50):
+            """Check if there's enough space on the page, and create a new page if needed."""
+            if y_position - height_needed < 50:
+                pdf.showPage()
+                pdf.setFont("Helvetica", 12)
+                return 750  # Reset y_position for new page
+            return y_position
+
+        # Itinerary Details
+        pdf.setFont("Helvetica-Bold", 12)
+        pdf.drawString(60, y_position, "Trip Information:")
+        pdf.setFont("Helvetica", 11)
+        y_position -= 20
+        pdf.drawString(80, y_position, f"Start Date: {itinerary.start_date.strftime('%Y-%m-%d')}")
+        pdf.drawString(250, y_position, f"End Date: {itinerary.end_date.strftime('%Y-%m-%d')}")
+        y_position -= 20
+        pdf.drawString(80, y_position, f"Created by: {itinerary.user.username}")
+
+        y_position -= 40  # Space before next section
+
+        # Destinations Section
+        pdf.setFont("Helvetica-Bold", 13)
+        pdf.setFillColor(colors.gray)
+        pdf.rect(50, y_position, 500, 25, fill=True, stroke=False)
+        pdf.setFillColor(colors.white)
+        pdf.drawString(60, y_position + 7, "Destinations")
+        pdf.setFillColor(colors.black)
+        y_position -= 30
+
+        destinations = itinerary.destinations.all() if hasattr(itinerary.destinations, 'all') else itinerary.destinations
+
+        for destination in destinations:
+            y_position = check_page_space(y_position, 50)
+            pdf.setFont("Helvetica-Bold", 12)
+            pdf.drawString(60, y_position, f"📍 {destination.name}")
+            y_position -= 20
+
+            pdf.setFont("Helvetica", 10)
+            activities = destination.activities.all() if hasattr(destination.activities, 'all') else destination.activities
+            accommodations = destination.accommodations.all() if hasattr(destination.accommodations, 'all') else destination.accommodations
+
+            # Activities
+            if activities:
+                pdf.drawString(80, y_position, "Activities:")
+                y_position -= 15
+                for activity in activities:
+                    y_position = check_page_space(y_position, 20)
+                    text = f"✔ {activity.name}: {activity.description[:50]}..."
+                    lines = simpleSplit(text, "Helvetica", 10, 450)
+                    for line in lines:
+                        pdf.drawString(100, y_position, line)
+                        y_position -= 15
+
+            # Accommodations
+            if accommodations:
+                y_position -= 10
+                pdf.drawString(80, y_position, "Accommodations:")
+                y_position -= 15
+                for accommodation in accommodations:
+                    y_position = check_page_space(y_position, 20)
+                    pdf.drawString(100, y_position, f"🏨 {accommodation.name} - ${accommodation.price:.2f}")
+                    y_position -= 15
+
+            y_position -= 20  # Space between destinations
+
+        # Packing List Section
+        y_position = check_page_space(y_position, 50)
+        pdf.setFont("Helvetica-Bold", 13)
+        pdf.setFillColor(colors.gray)
+        pdf.rect(50, y_position, 500, 25, fill=True, stroke=False)
+        pdf.setFillColor(colors.white)
+        pdf.drawString(60, y_position + 7, "Packing List")
+        pdf.setFillColor(colors.black)
+        y_position -= 30
+
+        packing_items = itinerary.packing_items.all() if hasattr(itinerary.packing_items, 'all') else itinerary.packing_items
+        pdf.setFont("Helvetica", 10)
+
+        for item in packing_items:
+            y_position = check_page_space(y_position, 20)
+            packed_status = "✔" if item.packed else "❌"
+            pdf.drawString(80, y_position, f"{packed_status} {item.item_name} - Qty: {item.quantity}")
+            y_position -= 15
+
+        pdf.showPage()
+        pdf.save()
+        buffer.seek(0)
+
+        return Response(buffer, mimetype='application/pdf', headers={"Content-Disposition": "attachment;filename=itinerary_report.pdf"})
+
+
+
+# Add to API routes
+api.add_resource(ItineraryReportPDF, '/itineraries/<int:id>/report/pdf')
 
 
 
